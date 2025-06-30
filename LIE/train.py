@@ -67,7 +67,7 @@ def plot_training_curves(train_losses, val_losses, train_accs, val_accs, save_pa
 
     plt.figure(figsize=(12, 5))
 
-    # 🔵 Loss 曲线
+    #Loss
     plt.subplot(1, 2, 1)
     plt.plot(epochs, train_losses, label='Train Loss', color='blue')
     plt.plot(epochs, val_losses, label='Val Loss', color='red')
@@ -76,7 +76,7 @@ def plot_training_curves(train_losses, val_losses, train_accs, val_accs, save_pa
     plt.title('Training and Validation Loss')
     plt.legend()
 
-    # 🟢 Accuracy 曲线
+    # Accuracy
     plt.subplot(1, 2, 2)
     plt.plot(epochs, train_accs, label='Train Accuracy', color='blue')
     plt.plot(epochs, val_accs, label='Val Accuracy', color='red')
@@ -399,27 +399,27 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch, trial=No
         labels = labels.to(device)
         vid = vid.to(device) if vid is not None else None
 
-        # 🔍 输入检查
+        # 输入检查
         if torch.isnan(aud).any() or torch.isnan(input_ids).any():
             print(f"[WARNING] Skipping batch {i}: NaN in input tensors")
             continue
 
         try:
             outputs = model(vid, aud, input_ids, attn_mask)
-            # 🔍 输出检查
+            # 输出检查
             if torch.isnan(outputs).any() or outputs.mean().item() == 0:
                 print(f"[WARNING] Skipping batch {i}: outputs are NaN or zero")
                 continue
 
             loss = criterion(outputs, labels)
 
-            # 🔍 loss 检查
+            # loss
             if torch.isnan(loss) or loss.item() == 0:
                 print(f"[WARNING] Skipping batch {i}: invalid loss: {loss.item()}")
                 continue
 
             loss.backward()
-            # 🔍 Gradient clipping
+            # Gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
@@ -432,14 +432,14 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch, trial=No
         total_correct += (preds == labels).sum().item()
         total_samples += labels.size(0)
 
-        # 🔍 Optuna 中间报告
+        # Optuna 中间报告
         if trial is not None and i % 10 == 0 and total_samples > 0:
             intermediate_value = total_loss / total_samples
             trial.report(intermediate_value, epoch)
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
 
-        # 🔍 Debug logging
+        # Debug logging
         if i % 10 == 0:
             print(f"[DEBUG] Epoch {epoch} | Batch {i}")
             print(f"[DEBUG] Loss: {loss.item():.4f} | Output mean: {outputs.mean().item():.4f}")
@@ -553,13 +553,13 @@ def main(config, trial=None):
         
         print(f"Epoch {epoch}: Train loss {train_loss:.4f} acc {train_acc:.4f} | Val loss {val_loss:.4f} acc {val_acc:.4f}")
 
-        # 保存最好模型
+        # save best model
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             best_epoch = epoch
             torch.save(model.state_dict(), os.path.join(save_dir, "best_model.pt"))
 
-        # 早停判断
+        # early stop
         if epoch - best_epoch >= config.get('early_stopping_patience', 5):
             print("Early stopping triggered")
             break
@@ -580,7 +580,7 @@ def objective(trial):
     config = {
         'seed': 42,
         'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-        'data_list_path': 'samples.json',  #######
+        'data_list_path': 'samples.json',  #Address change, need make one#
         'bert_model': 'bert-base-uncased',
         'batch_size': trial.suggest_categorical('batch_size', [16, 32]),
         'lr': trial.suggest_loguniform('lr', 1e-5, 1e-3),
@@ -599,7 +599,7 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-    # Optuna 调参入口
+    # Optuna
     study = optuna.create_study(direction='maximize')
     study.optimize(objective, n_trials=20)
 
