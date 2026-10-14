@@ -10,3 +10,4 @@ wandb
 optuna
 scikit-learn
 matplotlib
+opencv-python-headless
