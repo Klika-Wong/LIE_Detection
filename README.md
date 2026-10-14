@@ -1,9 +1,26 @@
-This project is based on the Lie Detection with Text and Image topic from Klika's final year undergraduate thesis at Taylor's University. It explores multimodal deception detection by integrating video, audio, and text data. The goal is to investigate the potential of deep learning models to identify deception from courtroom trial videos.
+# Multimodal Lie Detection Research
 
-Due to data privacy and licensing restrictions, the dataset used in this project—sourced from the University of Michigan’s public courtroom verdict database—cannot be publicly shared.
+This repository contains a partial research implementation for exploring video, audio, and text features in courtroom-trial data. It is a research prototype, not a reliable lie detector. Model outputs must not be treated as evidence about an individual's truthfulness.
 
-All data preprocessing and model training scripts were independently written by Klika during the project development phase. AI tools, particularly ChatGPT, were used to assist in writing code comments and improving documentation. Every part of the implementation reflects an understanding of deep learning workflows, data handling, and multimodal fusion techniques.
+## Data manifest
 
+The training entry point expects `samples.json` in the working directory. It must contain a JSON list of records with:
 
-  Note:
-  This repository only includes a portion of the codebase to respect the contributions of other team members involved in the broader group project. Additionally, due to the limited size of the dataset, the models are susceptible to overfitting, and results should be interpreted cautiously.
+- `text_json_path`: path to a UTF-8 JSON file containing a list of objects with a `text` field.
+- `audio_path`: path to an audio file readable by torchaudio.
+- `label`: integer class label (0 or 1).
+- `frame_images`: optional list of image paths for video frames.
+
+The dataset and paths are private inputs; keep the manifest and source data out of the repository.
+
+## Environment
+
+Install packages from `requirements.txt`. Install a mutually compatible PyTorch, TorchVision, and TorchAudio build for your operating system and accelerator. The script downloads pretrained BERT and ResNet weights when first run and uses Optuna for hyperparameter search.
+
+Run training from this directory with:
+
+```bash
+python train.py
+```
+
+Training writes checkpoints and a training-curve image under `checkpoints/`. Check the class distribution and evaluate on an independent dataset before interpreting metrics.
