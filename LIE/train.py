@@ -1,23 +1,26 @@
-import os
 import json
+import os
 import random
 import threading
+
+import matplotlib.pyplot as plt
 import numpy as np
-from tqdm import tqdm
-
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
-import torchvision.models as models
 import torchaudio
-
-from transformers import BertModel, BertTokenizer
-from torch.utils.tensorboard import SummaryWriter
-import wandb
-import optuna
+import torchaudio.transforms as TAudio
+import torchvision.models as models
+import torchvision.transforms as T
+from PIL import Image
 from sklearn.model_selection import train_test_split
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+from transformers import BertModel, BertTokenizer
+
+import optuna
+import wandb
 
 
 # ---------------------- Utilities ----------------------
@@ -31,36 +34,6 @@ def set_seed(seed=42):
 
 
 # ---------------------- Dataset ----------------------
-from PIL import Image
-import torchvision.transforms as T
-import torch
-
-import torch
-import torch.nn as nn
-import torchaudio
-import torchaudio.transforms as TAudio
-import torchvision.transforms as T
-from torch.utils import data
-from PIL import Image
-import json
-import random
-
-import os
-import json
-import torch
-import random
-import traceback
-import threading
-import torchaudio
-import torch.nn as nn
-from torch.utils import data
-from PIL import Image
-from torchvision import transforms as T
-import torchaudio.transforms as TAudio
-
-
-import matplotlib.pyplot as plt
-
 def plot_training_curves(train_losses, val_losses, train_accs, val_accs, save_path):
     epochs = range(1, len(train_losses) + 1)
 
