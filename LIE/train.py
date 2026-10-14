@@ -425,7 +425,12 @@ def validate_epoch(model, dataloader, criterion, device, epoch, tb_writer=None, 
             vid = vid.to(device) if vid is not None else None
 
             outputs = model(vid, aud, input_ids, attn_mask)
+            if not torch.isfinite(outputs).all():
+                raise RuntimeError("Validation outputs contain non-finite values.")
+
             loss = criterion(outputs, labels)
+            if not torch.isfinite(loss):
+                raise RuntimeError("Validation loss is non-finite.")
 
             total_loss += loss.item() * labels.size(0)
             preds = outputs.argmax(dim=1)
