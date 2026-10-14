@@ -6,6 +6,7 @@ class TextModel(nn.Module):
     def __init__(self, freeze_bert=True, bert_model_name='bert-base-uncased', freeze_layers=8, out_dim=256):
         super(TextModel, self).__init__()
         # Load pretrained BERT model
+        self.output_dim = out_dim
         self.bert = BertModel.from_pretrained(bert_model_name)
         
         if freeze_bert:
