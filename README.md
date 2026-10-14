@@ -9,9 +9,10 @@ The training entry point expects `samples.json` in the working directory. It mus
 - `text_json_path`: path to a UTF-8 JSON file containing a list of objects with a `text` field.
 - `audio_path`: path to an audio file readable by torchaudio.
 - `label`: integer class label (0 or 1).
+- `group_id`: stable speaker/subject identifier used to keep each person entirely within one split.
 - `frame_images`: optional list of image paths for video frames.
 
-The dataset and paths are private inputs; keep the manifest and source data out of the repository.
+The dataset and paths are private inputs; keep the manifest and source data out of the repository. The training script requires `group_id` and uses a group-isolated validation split. It stops if either split lacks one of the two labels; adjust the group assignments or validation fraction while preserving subject isolation.
 
 ## Environment
 
@@ -23,4 +24,4 @@ Run training from this directory with:
 python train.py
 ```
 
-Training writes checkpoints and a training-curve image under `checkpoints/`. Check the class distribution and evaluate on an independent dataset before interpreting metrics.
+Training writes checkpoints and a training-curve image under `checkpoints/`. Check the class distribution and evaluate on an independent dataset before interpreting metrics. This repository does not create an independent test set, so validation metrics alone are not final performance estimates.
