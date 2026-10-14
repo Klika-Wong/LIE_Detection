@@ -166,3 +166,4 @@ runs/
 wandb/
 __pycache__/
 *.py[cod]
+prepared_frames/
