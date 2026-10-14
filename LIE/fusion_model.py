@@ -72,6 +72,14 @@ class FusionModelSmallData(nn.Module):
             nn.Linear(fusion_dim // 2, num_classes)
         )
 
+    def train(self, mode=True):
+        super().train(mode)
+        if self.freeze_submodels:
+            self.video_model.eval()
+            self.audio_model.eval()
+            self.text_model.eval()
+        return self
+
     def forward(self, video_x, audio_x, input_ids, attention_mask=None, token_type_ids=None):
         # 子模型特征提取
         video_feat = self.video_model(video_x)
