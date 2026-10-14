@@ -14,7 +14,7 @@ import torchaudio.transforms as TAudio
 import torchvision.models as models
 import torchvision.transforms as T
 from PIL import Image
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import BertModel, BertTokenizer
@@ -150,8 +150,7 @@ class MultimodalDataset(data.Dataset):
                 text_segments = json.load(f)
             full_text = " ".join([seg['text'] for seg in text_segments])
 
-            if self.augment:
-                full_text = self._augment_text(full_text)
+            # Keep speech disfluencies intact; they may be relevant to the task.
 
             enc = self.tokenizer(
                 full_text,
@@ -211,7 +210,9 @@ class MultimodalDataset(data.Dataset):
                 frames.extend([pad_frame] * (self.max_video_len - len(frames)))
 
             video_tensor = torch.stack(frames)  # (T, C, H, W)
-            label = torch.tensor(sample['label'], dtype=torch.long)
+            if sample["label"] not in (0, 1):
+                raise ValueError("label must be 0 or 1")
+            label = torch.tensor(sample["label"], dtype=torch.long)
 
             return (
                     video_tensor,
@@ -369,48 +370,34 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch, trial=No
             print(f"[WARNING] Skipping batch {i}: NaN in input tensors")
             continue
 
-        try:
-            outputs = model(vid, aud, input_ids, attn_mask)
-            # 输出检查
-            if not torch.isfinite(outputs).all():
-                print(f"[WARNING] Skipping batch {i}: outputs contain non-finite values")
-                continue
-
-            loss = criterion(outputs, labels)
-
-            # loss
-            if not torch.isfinite(loss):
-                print(f"[WARNING] Skipping batch {i}: loss is non-finite")
-                continue
-
-            loss.backward()
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-            optimizer.step()
-
-        except Exception as e:
-            print(f"[ERROR] Exception at batch {i}: {e}")
+        outputs = model(vid, aud, input_ids, attn_mask)
+        if not torch.isfinite(outputs).all():
+            print(f"[WARNING] Skipping batch {i}: outputs contain non-finite values")
             continue
+
+        loss = criterion(outputs, labels)
+        if not torch.isfinite(loss):
+            print(f"[WARNING] Skipping batch {i}: loss is non-finite")
+            continue
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+        optimizer.step()
 
         total_loss += loss.item() * labels.size(0)
         preds = outputs.argmax(dim=1)
         total_correct += (preds == labels).sum().item()
         total_samples += labels.size(0)
 
-        # Optuna 中间报告
-        if trial is not None and i % 10 == 0 and total_samples > 0:
-            intermediate_value = total_loss / total_samples
-            trial.report(intermediate_value, epoch)
-            if trial.should_prune():
-                raise optuna.exceptions.TrialPruned()
-
         # Debug logging
         if i % 10 == 0:
             print(f"[DEBUG] Epoch {epoch} | Batch {i}")
             print(f"[DEBUG] Loss: {loss.item():.4f} | Output mean: {outputs.mean().item():.4f}")
 
-    avg_loss = total_loss / total_samples if total_samples > 0 else 0
-    accuracy = total_correct / total_samples if total_samples > 0 else 0
+    if total_samples == 0:
+        raise RuntimeError("No finite training samples were processed in this epoch.")
+    avg_loss = total_loss / total_samples
+    accuracy = total_correct / total_samples
 
     if tb_writer is not None:
         tb_writer.add_scalar("Train/Loss", avg_loss, epoch)
@@ -445,6 +432,8 @@ def validate_epoch(model, dataloader, criterion, device, epoch, tb_writer=None, 
             total_correct += (preds == labels).sum().item()
             total_samples += labels.size(0)
 
+    if total_samples == 0:
+        raise RuntimeError("The validation loader produced no samples.")
     avg_loss = total_loss / total_samples
     accuracy = total_correct / total_samples
 
@@ -467,7 +456,23 @@ def main(config, trial=None):
     with open(config['data_list_path'], 'r') as f:
         samples = json.load(f)
     
-    train_samples, val_samples = train_test_split(samples, test_size=0.2, random_state=config['seed'])
+    groups = [sample.get("group_id") for sample in samples]
+    if any(not isinstance(group, str) or not group.strip() for group in groups):
+        raise ValueError(
+            "Every sample must include a non-empty group_id (speaker/subject ID) "
+            "for leakage-resistant validation."
+        )
+
+    splitter = GroupShuffleSplit(
+        n_splits=1, test_size=0.2, random_state=config["seed"]
+    )
+    train_indices, val_indices = next(splitter.split(samples, groups=groups))
+    train_samples = [samples[i] for i in train_indices]
+    val_samples = [samples[i] for i in val_indices]
+    if {sample["label"] for sample in train_samples} != {0, 1}:
+        raise ValueError("Training split must contain both labels 0 and 1; adjust groups.")
+    if {sample["label"] for sample in val_samples} != {0, 1}:
+        raise ValueError("Validation split must contain both labels 0 and 1; adjust groups.")
 
     # 初始化 tokenizer
     tokenizer = BertTokenizer.from_pretrained(config['bert_model'])
@@ -498,7 +503,7 @@ def main(config, trial=None):
         wandb.init(project=config['wandb_project'], config=config)
         wandb_run = wandb.run
 
-    best_val_acc = 0
+    best_val_acc = -1
     best_epoch = 0
     save_dir = config['save_dir']
     os.makedirs(save_dir, exist_ok=True)
@@ -517,6 +522,10 @@ def main(config, trial=None):
         val_accs.append(val_acc)
         
         print(f"Epoch {epoch}: Train loss {train_loss:.4f} acc {train_acc:.4f} | Val loss {val_loss:.4f} acc {val_acc:.4f}")
+        if trial is not None:
+            trial.report(val_acc, epoch)
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
 
         # save best model
         if val_acc > best_val_acc:
