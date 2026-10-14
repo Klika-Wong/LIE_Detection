@@ -1,0 +1,12 @@
+numpy
+Pillow
+tqdm
+torch
+torchvision
+torchaudio
+transformers
+tensorboard
+wandb
+optuna
+scikit-learn
+matplotlib
