@@ -5,7 +5,6 @@ import threading
 import numpy as np
 from tqdm import tqdm
 
-import traceback
 
 import torch
 import torch.nn as nn
@@ -96,7 +95,7 @@ class MultimodalDataset(data.Dataset):
                  max_text_len=128, max_audio_len=500,
                  video_transform=None, target_audio_channels=4,
                  sample_rate=16000, max_video_len=16,
-                 augment=False, skip_error=True):
+                 augment=False):
         self.samples = samples
         self.tokenizer = tokenizer
         self.max_text_len = max_text_len
@@ -107,7 +106,6 @@ class MultimodalDataset(data.Dataset):
         self.device = device
         self.max_video_len = max_video_len
         self.augment = augment
-        self.skip_error = skip_error
 
         # 音频处理
         self.melspec = torchaudio.transforms.MelSpectrogram(
@@ -173,7 +171,6 @@ class MultimodalDataset(data.Dataset):
     def __getitem__(self, idx):
         try:
             sample = self.samples[idx]
-            print(f"[DEBUG] Loading sample {idx}")
 
             # === 文本处理 ===
             with open(sample['text_json_path'], 'r', encoding='utf-8') as f:
@@ -253,12 +250,7 @@ class MultimodalDataset(data.Dataset):
 
 
         except Exception as e:
-            traceback.print_exc()
-            print(f"[ERROR] Failed to load sample {idx}: {e}")
-            if self.skip_error:
-                return self.__getitem__((idx + 1) % len(self.samples))  # 尝试加载下一个样本
-            else:
-                raise e
+            raise RuntimeError(f"Failed to load sample at index {idx}.") from e
 
 # ---------------------- Models ----------------------
 class VideoTransformer(nn.Module):
@@ -400,22 +392,22 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch, trial=No
         vid = vid.to(device) if vid is not None else None
 
         # 输入检查
-        if torch.isnan(aud).any() or torch.isnan(input_ids).any():
+        if not torch.isfinite(aud).all():
             print(f"[WARNING] Skipping batch {i}: NaN in input tensors")
             continue
 
         try:
             outputs = model(vid, aud, input_ids, attn_mask)
             # 输出检查
-            if torch.isnan(outputs).any() or outputs.mean().item() == 0:
-                print(f"[WARNING] Skipping batch {i}: outputs are NaN or zero")
+            if not torch.isfinite(outputs).all():
+                print(f"[WARNING] Skipping batch {i}: outputs contain non-finite values")
                 continue
 
             loss = criterion(outputs, labels)
 
             # loss
-            if torch.isnan(loss) or loss.item() == 0:
-                print(f"[WARNING] Skipping batch {i}: invalid loss: {loss.item()}")
+            if not torch.isfinite(loss):
+                print(f"[WARNING] Skipping batch {i}: loss is non-finite")
                 continue
 
             loss.backward()
